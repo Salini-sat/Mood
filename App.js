@@ -93,12 +93,15 @@ export default function App() {
   const [customYogaPose, setCustomYogaPose] = useState("");
   const [savedYoga, setSavedYoga] = useState([]);
   const [viewDiet, setViewDiet] = useState(false);
+  const [sleepHours, setSleepHours] = useState("");
+  const [viewSummary, setViewSummary] = useState(false);
 
   useEffect(() => {
     loadPassword();
     loadTodos();
-    loadWater();
+    loadTodayWater();
     loadLatestYoga();
+    loadTodaySleep();
     const today = new Date().toISOString().split("T")[0];
     setDiaryDate(today);
   }, []);
@@ -143,8 +146,9 @@ export default function App() {
     }
   };
 
-  const loadWater = async () => {
-    const saved = await AsyncStorage.getItem("water-today");
+  const loadTodayWater = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const saved = await AsyncStorage.getItem(`water-${today}`);
     if (saved) setWaterIntake(parseInt(saved, 10));
 
     const goal = await AsyncStorage.getItem("water-goal");
@@ -152,9 +156,11 @@ export default function App() {
   };
 
   const addWater = async () => {
-    const newVal = waterIntake + 250;
+    const today = new Date().toISOString().split("T")[0];
+    const stored = await AsyncStorage.getItem(`water-${today}`);
+    let newVal = stored ? parseInt(stored, 10) + 250 : 250;
     setWaterIntake(newVal);
-    await AsyncStorage.setItem("water-today", newVal.toString());
+    await AsyncStorage.setItem(`water-${today}`, newVal.toString());
     if (newVal >= waterGoal) {
       Alert.alert("Hydration Goal", "You’ve reached your daily goal!");
     }
@@ -196,12 +202,8 @@ export default function App() {
   };
 
   const loadTodos = async () => {
-    try {
-      const value = await AsyncStorage.getItem("todo-list");
-      if (value) setTodoList(JSON.parse(value));
-    } catch (e) {
-      console.log("Error loading todos", e);
-    }
+    const value = await AsyncStorage.getItem("todo-list");
+    if (value) setTodoList(JSON.parse(value));
   };
 
   const addTodo = async () => {
@@ -229,6 +231,56 @@ export default function App() {
   const loadLatestYoga = async () => {
     const latest = await AsyncStorage.getItem("latest-yoga");
     if (latest) setSavedYoga(JSON.parse(latest));
+  };
+
+  const saveTodaySleep = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    await AsyncStorage.setItem(`sleep-${today}`, sleepHours);
+    Alert.alert("Saved", "Today's sleep logged.");
+  };
+
+  const loadTodaySleep = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const stored = await AsyncStorage.getItem(`sleep-${today}`);
+    if (stored) setSleepHours(stored);
+  };
+
+  const viewMonthlySummary = async () => {
+    let sleepTotals = [];
+    let moodsList = [];
+    let waterTotal = 0;
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, "0");
+
+    for (let i = 1; i <= 31; i++) {
+      const day = i < 10 ? `0${i}` : `${i}`;
+      const date = `${year}-${month}-${day}`;
+
+      const sleep = await AsyncStorage.getItem(`sleep-${date}`);
+      if (sleep) sleepTotals.push(Number(sleep));
+
+      const mood = await AsyncStorage.getItem(`mood-${date}`);
+      if (mood) moodsList.push({ date, mood });
+
+      const water = await AsyncStorage.getItem(`water-${date}`);
+      if (water) waterTotal += parseInt(water);
+    }
+
+    const avgSleep =
+      sleepTotals.length > 0
+        ? (sleepTotals.reduce((a, b) => a + b, 0) / sleepTotals.length).toFixed(
+            1
+          )
+        : "N/A";
+
+    Alert.alert(
+      "Monthly Summary",
+      `Average Sleep: ${avgSleep} hrs\nTotal Water Intake: ${waterTotal} ml\nYoga Poses: ${
+        savedYoga.join(", ") || "None"
+      }\nLogged moods: ${moodsList.length}`
+    );
   };
 
   const renderMoodSelection = () => (
@@ -308,7 +360,6 @@ export default function App() {
           <Text>{pose}</Text>
         </TouchableOpacity>
       ))}
-
       <TextInput
         style={styles.input}
         placeholder="Add custom pose..."
@@ -360,6 +411,17 @@ export default function App() {
         </Text>
       </View>
 
+      <View style={styles.checklistRow}>
+        <TextInput
+          style={[styles.input, { flex: 1 }]}
+          placeholder="Hours Slept Today"
+          keyboardType="numeric"
+          value={sleepHours}
+          onChangeText={setSleepHours}
+        />
+        <Button title="Save Sleep" onPress={saveTodaySleep} />
+      </View>
+
       <Button title="Set Yoga Routine" onPress={() => setViewYoga(true)} />
 
       {savedYoga.length > 0 && (
@@ -397,6 +459,7 @@ export default function App() {
         title="Balanced Diet Suggestions"
         onPress={() => setViewDiet(true)}
       />
+      <Button title="View Monthly Summary" onPress={viewMonthlySummary} />
 
       <TextInput
         style={styles.input}
@@ -443,21 +506,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontStyle: "italic",
     marginVertical: 10,
-    backgroundColor: "#d6f5d6",
-    padding: 10,
-    borderRadius: 8,
-  },
-  checklistRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginVertical: 10,
+    color: "#444",
   },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     padding: 10,
+    marginVertical: 10,
     borderRadius: 5,
-    marginBottom: 10,
+  },
+  checklistRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 5,
   },
 });
+
